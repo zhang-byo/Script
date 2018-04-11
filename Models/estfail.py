@@ -1,10 +1,15 @@
-from DBUtils import choose_perf_collection
+from .DBUtils import choose_perf_collection
 from ..database import database
+from ..utils import datetime_timestamp, format_datetime
 
 COLLECTION = 't_term_vsim_estfail'
-def get_imsi_fail(imsi_list, begin_time, end_time):
+
+# $bug: 没有对多表查询结果数据做整合, 因为太啰嗦, 性能预计很差. 所以放弃
+def get_fail_data(imsi_list, begin_datetime, end_datetime):
+    begin_time = datetime_timestamp(begin_datetime)
+    end_time = datetime_timestamp(end_datetime)
     ## 1. 获取分表
-    collections = choose_perf_collection(begin_time, end_time, COLLECTION)
+    collections = choose_perf_collection(begin_datetime, end_datetime, COLLECTION)
 
     ## 2. 查询错误数据
     estfail = []
@@ -26,5 +31,5 @@ def get_imsi_fail(imsi_list, begin_time, end_time):
             d.update(d.pop('_id'))
             tmp.append(d)
 
-        estfail.extend(tmp)    
+        estfail.extend(tmp)  
     return estfail

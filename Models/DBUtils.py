@@ -10,7 +10,12 @@ from database import database
 import pymysql
 import pymongo
 
+D_PERF_VSIM_ESTFAIL_PREFIX = 't_term_vsim_estfail'
+D_PERF_VSIM_ESTSUCC_PREFIX = 't_term_vsim_estsucc'
+
 D_PERF_DB_SUB_COL = 't_db_sub_collections'
+D_OSS_HOURFLOW = 't_terminal_flow_count_hour'
+D_OSS_DAYFLOW = 't_terminal_flow_count_day'
 
 # 根据时间, 获取perflog的分表信息. 返回值是列表
 def choose_perf_collection(begin_time, end_time, prefix):
@@ -32,3 +37,9 @@ def choose_perf_collection(begin_time, end_time, prefix):
         collections.append(item['collectionName'])
 
     return collections
+
+def choose_hourflow_collection(begin_datetime):
+    return '{0}_{1}'.format(D_OSS_HOURFLOW, format_datetime(begin_datetime, '%Y%m01'))
+
+def choose_dayflow_collection(begin_datetime):
+    return '{0}_{1}'.format(D_OSS_DAYFLOW, format_datetime(begin_datetime, '%Y%m01'))
