@@ -7,4 +7,4 @@
 细想的话, 其实这就是MVC的思路了
 
 ## 规则
-* 时间: 无论是sql还是mongo, 函数参数都取datetime, 因为timestamp不方便做天加减. (然而天的加减是不是放在model函数外取处理比较好?)
+* 时间: 无论是sql还是mongo, 函数参数都取datetime, 因为timestamp不方便做运算和format.
