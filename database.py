@@ -25,7 +25,6 @@ class database:
         self.DB_TYPE = conf['db_type']
 
     def get_db(self):
-
         if self.DB_TYPE == 'mysql':
             return self._mysql_connetion()
 
@@ -50,24 +49,7 @@ class database:
                self.DB_HOST + ':' + \
                str(self.DB_PORT) + '/' + \
                self.DB_NAME + '?authMechanism=SCRAM-SHA-1'
-        return pymongo.MongoClient(link)
-
-    def query(self, query):
-        if self.DB_TYPE == 'mysql':
-            return self._query_mysql(query)
-        elif self.DB_TYPE == 'mongo':
-            return self._query_mongo(query)
-        else:
-            raise ValueError('unKnown database type: {0}'.format(self.DB_TYPE))
-
-    def _query_mysql(self, query):
-        with self._mysql_connetion().cursor(pymysql.cursors.DictCursor) as cur:
-            cur.excute(query)
-            rv = cur.fetchall()
-        return rv
-
-    def _query_mongo(self, query, args=()):
-        raise pymongo.errors.OperationFailure('not support mongo query fucntion yet')
+        return pymongo.MongoClient(link)[self.DB_NAME]
 
 if __name__ == '__main__':
     pass
