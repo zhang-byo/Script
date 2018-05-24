@@ -42,6 +42,11 @@ def load_imei_org():
         imei_org = json.load(f)
     return imei_org
 
+def load_mcc_country():
+    with open('mcc_country.json', 'r') as f:
+        mcc_country = json.load(f)
+    return mcc_country
+
 def fetchDayFlow():
     begin_datetime = mkdatetime('2017-01-01')
     end_datetime = mkdatetime('2017-01-10')
@@ -60,22 +65,41 @@ def fetchDayFlow():
     keys = ['createtime', 'lac', 'mcc', 'plmn', 'imei', 'imsi', 'userFlow', 'cardFlow', 'sysFlow']
 
     imei_org = load_imei_org()
+    mcc_country = load_mcc_country()
     # format data, and deal with missing data
     for i in range(len(rdata)):
         # deal with missing key
         missing_key = list(set(keys).difference(set(rdata[i].keys())))
         for k in missing_key:
             if k in ['lac', 'imsi', 'plmn', 'mcc', 'imei']:
-                rdata[i][k] = 'null'
+                rdata[i][k] = 'NaN'
             else:
                 rdata[i][k] = 0
-        # add t_orgid info
-        if rdata[i]['imei'] != 'null' & (rdata[i]['imei'] in imei_org.keys()):
+        # add imei info
+        if rdata[i]['imei'] != 'NaN' and (rdata[i]['imei'] in imei_org.keys()):
             rdata[i]['t_orgid'] = imei_org[rdata[i]['imei']]['t_orgid']
             rdata[i]['t_type'] = imei_org[rdata[i]['imei']]['t_type']
         else:
-            rdata[i]['t_orgid'] = 'null'
-            rdata[i]['t_type'] = 'null'
+            rdata[i]['t_orgid'] = 'NaN'
+            rdata[i]['t_type'] = 'NaN'
+
+        # add country info
+        if rdata[i]['mcc'] != 'NaN' and (rdata[i]['mcc'] in mcc_country.keys()):
+            # deal GU and SP
+            if rdata[i]['mcc'] == '310':
+                if rdata[i]['plmn'] != 'NaN':
+                    mnc = rdata[i]['plmn'][-3:]
+                    if (mnc in ['470', '140']) and \
+                        (rdata[i]['lac'] in ['208','171','1', '10', '23', '24', '60', '66']):
+                        rdata[i]['country'] = 'SPGU'
+                    else:
+                        rdata[i]['country'] = 'US'
+                else:
+                    rdata[i]['country'] = 'US'
+            else:
+                rdata[i]['country'] = mcc_country[rdata[i]['mcc']]
+        else:
+            rdata[i]['country'] = 'NaN'
     return rdata
 
 def insertTable(data, target_table):
@@ -83,8 +107,10 @@ def insertTable(data, target_table):
     cur = gsvc.cursor()
     for i in range(len(data)):
         insert_stmt = "INSERT INTO `{target}`(createtime, lac, mcc, plmn, imei, imsi, "\
-                    "userFlow, cardFlow, sysFlow, t_type, t_orgid) VALUES ("\
-                    "'{createtime}','{lac}','{mcc}','{plmn}','{imei}','{imsi}','{userFlow}','{cardFlow}','{sysFlow}','{t_type}','{t_orgid}')".format(
+                    "userFlow, cardFlow, sysFlow, t_type, t_orgid, country) VALUES ("\
+                    "'{createtime}','{lac}','{mcc}','{plmn}','{imei}',"\
+                    "'{imsi}','{userFlow}','{cardFlow}','{sysFlow}','{t_type}',"\
+                    "'{t_orgid}','{country}')".format(
                         target=target_table,
                         createtime=data[i]['createtime'],
                         lac=data[i]['lac'],
@@ -96,8 +122,9 @@ def insertTable(data, target_table):
                         cardFlow=data[i]['cardFlow'],
                         sysFlow=data[i]['sysFlow'],
                         t_type=data[i]['t_type'],
-                        t_orgid=data[i]['t_orgid']
-                        )
+                        t_orgid=data[i]['t_orgid'],
+                        country=data[i]['country']
+                    )
         cur.execute(insert_stmt)
     gsvc.commit()
     cur.close()
@@ -108,12 +135,10 @@ if __name__ == '__main__':
     # get_imei_org()
     # 1. 抽取mongo数据，增加type，orgid字段
     flowdata = fetchDayFlow()
-    # 2. 多线程，分块插入数据
+    # 2. 分块插入数据
     i = 0
-    sema = threading.Semaphore(2)
-    with sema:
-        while i < len(flowdata):
-            subdata = flowdata[i:(i + 5000)]
-            t = threading.Thread(target=insertTable, args=(subdata, 't_terminal_flow_count_day_201701'))
-            t.start()
-            i += 5000
+    while i < len(flowdata):
+        subdata = flowdata[i:(i + 5000)]
+        insertTable(subdata, 't_terminal_flow_count_day_201701')
+        i += 5000
+
