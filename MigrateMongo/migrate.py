@@ -47,9 +47,7 @@ def load_mcc_country():
         mcc_country = json.load(f)
     return mcc_country
 
-def fetchDayFlow():
-    begin_datetime = mkdatetime('2017-01-01')
-    end_datetime = mkdatetime('2017-01-10')
+def fetch_day_flow(begin_datetime, end_datetime):
     begin_time = datetime_timestamp(begin_datetime)
     end_time = datetime_timestamp(end_datetime)
 
@@ -126,7 +124,9 @@ def insertTable(data, target_table):
                         country=data[i]['country']
                     )
         cur.execute(insert_stmt)
-    gsvc.commit()
+        # commit per 5000 records, avoid buffer overflow
+        if i % 5000 == 0 or i == (len(data) - 1):
+            gsvc.commit()
     cur.close()
     gsvc.close()
 
@@ -134,11 +134,9 @@ if __name__ == '__main__':
     # 0. 准备imei-org数据
     # get_imei_org()
     # 1. 抽取mongo数据，增加type，orgid字段
-    flowdata = fetchDayFlow()
-    # 2. 分块插入数据
-    i = 0
-    while i < len(flowdata):
-        subdata = flowdata[i:(i + 5000)]
-        insertTable(subdata, 't_terminal_flow_count_day_201701')
-        i += 5000
-
+    begin_datetime = mkdatetime('2017-01-10')
+    end_datetime = mkdatetime('2017-02-01')
+    while begin_datetime < end_datetime:
+        flowdata = fetch_day_flow(begin_datetime, begin_datetime + datetime.timedelta(days=1))
+        insertTable(flowdata, 't_terminal_flow_count_day_201701')
+        begin_datetime += datetime.timedelta(days=1)
