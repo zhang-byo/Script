@@ -138,5 +138,7 @@ if __name__ == '__main__':
     end_datetime = mkdatetime('2017-02-01')
     while begin_datetime < end_datetime:
         flowdata = fetch_day_flow(begin_datetime, begin_datetime + datetime.timedelta(days=1))
-        insertTable(flowdata, 't_terminal_flow_count_day_201701')
+        insertTable(flowdata, 't_terminal_flow_count_day_{0}'.format(format_datetime(begin_datetime, '%Y%m')))
         begin_datetime += datetime.timedelta(days=1)
+        print('< {} is done\n'.format(format_datetime(begin_datetime, '%Y-%m-%d')))
+
