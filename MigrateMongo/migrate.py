@@ -47,6 +47,7 @@ def load_mcc_country():
         mcc_country = json.load(f)
     return mcc_country
 
+# 内存消耗大的版本，程序好像存在循环抽取的bug
 def fetch_day_flow(begin_datetime, end_datetime):
     begin_time = datetime_timestamp(begin_datetime)
     end_time = datetime_timestamp(end_datetime)
@@ -100,6 +101,72 @@ def fetch_day_flow(begin_datetime, end_datetime):
             rdata[i]['country'] = 'NaN'
     return rdata
 
+# 优化内存消耗的版本
+def fetch_day_flow_cursor(begin_datetime, end_datetime):
+    begin_time = datetime_timestamp(begin_datetime)
+    end_time = datetime_timestamp(end_datetime)
+    
+    match = {'createtime': {'$gte': begin_time, '$lt': end_time}}
+    project = {'_id': 0}
+    mgo = database('GSVC_MGO').get_db()
+    cur = mgo.get_collection('dayChargeFlower').find(match, project)
+    keys = ['createtime', 'lac', 'mcc', 'plmn', 'imei', 'imsi', 'userFlower', 'cardFlow', 'sysFlower']
+    count = 0
+    tmp = [] # data to be insert
+    imei_org = load_imei_org()
+    mcc_country = load_mcc_country()
+    while True:
+        try:
+            doc = cur.next()
+        except StopIteration:
+            # 最后一次插入            
+            if tmp:
+                insertTable(tmp, 't_terminal_flow_count_day_201701')
+            break
+        # 处理缺失的key
+        missing_key = list(set(keys).difference(set(doc.keys())))
+        for k in missing_key:
+            if k in ['lac', 'imsi', 'plmn', 'mcc', 'imei']:
+                doc[k] = 'NaN'
+            else:
+                doc[k] = 0
+        # 丢弃异常流量数据
+        # 不在数据库做限制，是因为加上这个条件后，查询和数据抽取的性能低下
+        if doc['userFlower'] > 2147483648:
+            continue
+        # 增加imei信息
+        if doc['imei'] != 'NaN' and (doc['imei'] in imei_org.keys()):
+            doc['t_orgid'] = imei_org[doc['imei']]['t_orgid']
+            doc['t_type'] = imei_org[doc['imei']]['t_type']
+        else:
+            doc['t_orgid'] = 'NaN'
+            doc['t_type'] = 'NaN'
+        # 增加国家信息
+        if doc['mcc'] != 'NaN' and (doc['mcc'] in mcc_country.keys()):
+            # deal GU and SP
+            if doc['mcc'] == '310':
+                if doc['plmn'] != 'NaN':
+                    mnc = doc['plmn'][-3:]
+                    if (mnc in ['470', '140']) and \
+                        (doc['lac'] in ['208','171','1', '10', '23', '24', '60', '66']):
+                        doc['country'] = 'SPGU'
+                    else:
+                        doc['country'] = 'US'
+                else:
+                    doc['country'] = 'US'
+            else:
+                doc['country'] = mcc_country[doc['mcc']]
+        else:
+            doc['country'] = 'NaN'
+        
+        tmp.append(doc)
+        count += 1
+        # 每2000条做一次数据插入
+        if count % 2000 == 0:
+            insertTable(tmp, 't_terminal_flow_count_day_201701')
+            print('insert {}\n'.format(count))
+            tmp = []
+        
 def insertTable(data, target_table):
     gsvc = database('GSVC_SQL_ADMIN').get_db()
     cur = gsvc.cursor()
@@ -116,17 +183,15 @@ def insertTable(data, target_table):
                         plmn=data[i]['plmn'],
                         imei=data[i]['imei'],
                         imsi=data[i]['imsi'],
-                        userFlow=data[i]['userFlow'],
+                        userFlow=data[i]['userFlower'],
                         cardFlow=data[i]['cardFlow'],
-                        sysFlow=data[i]['sysFlow'],
+                        sysFlow=data[i]['sysFlower'],
                         t_type=data[i]['t_type'],
                         t_orgid=data[i]['t_orgid'],
                         country=data[i]['country']
                     )
         cur.execute(insert_stmt)
-        # commit per 5000 records, avoid buffer overflow
-        if i % 5000 == 0 or i == (len(data) - 1):
-            gsvc.commit()
+    gsvc.commit()
     cur.close()
     gsvc.close()
 
@@ -134,11 +199,6 @@ if __name__ == '__main__':
     # 0. 准备imei-org数据
     # get_imei_org()
     # 1. 抽取mongo数据，增加type，orgid字段
-    begin_datetime = mkdatetime('2017-01-10')
+    begin_datetime = mkdatetime('2017-01-15')
     end_datetime = mkdatetime('2017-02-01')
-    while begin_datetime < end_datetime:
-        flowdata = fetch_day_flow(begin_datetime, begin_datetime + datetime.timedelta(days=1))
-        insertTable(flowdata, 't_terminal_flow_count_day_{0}'.format(format_datetime(begin_datetime, '%Y%m')))
-        begin_datetime += datetime.timedelta(days=1)
-        print('< {} is done\n'.format(format_datetime(begin_datetime, '%Y-%m-%d')))
-
+    fetch_day_flow_cursor(begin_datetime, end_datetime)
