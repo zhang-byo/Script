@@ -73,15 +73,15 @@ def format_datetime(dt, fmt='%Y-%m-%d %H:%M:%S'):
     return dt.strftime(fmt)
 
 # decorator
+# 含参数时，必须指定位置参数赋值
 def tick_time(func):
-    def tick(**kwgs):
+    def tick(*args, **kwgs):
         time0 = time.clock()
         print('Execute: ', format_datetime(datetime.now()))
         try:
-            func(**kwgs)
+            return func(*args, **kwgs)
         finally:
             print('Take time: ', time.clock() - time0)
-        print('Take time: ', time.clock() - time0)
 
     return tick
 
