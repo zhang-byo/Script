@@ -21,7 +21,6 @@
 from database import database
 from utils import mkdatetime, format_datetime, tick_time, datetime_timestamp, timestamp_datetime
 
-import json
 import datetime
 import pyexcel
 import pymysql
@@ -80,14 +79,14 @@ def generate_timestamp_datetime():
 # 单独day, 单独type, 单独org,或者org-type的数据,都可以通过中间表day-org-type二次计算获得
 @tick_time
 def flowlog_by_day_org_type(table_name):
-    query = ("SELECT DATE(t2.date) AS date, t1.country, t1.t_type, t1.active_count, t1.flow_KB FROM ( "
-             "SELECT createtime, country, t_type, COUNT(DISTINCT imei) AS active_count, (SUM(sysFlow) + SUM(userFlow))/1024 AS flow_KB "
+    query = ("SELECT DATE(t2.date) AS date, t1.t_orgid, t1.t_type, t1.active_count, t1.flow_KB FROM ( "
+             "SELECT createtime, t_orgid, t_type, COUNT(DISTINCT imei) AS active_count, (SUM(sysFlow) + SUM(userFlow))/1024 AS flow_KB "
              "FROM `{}` "
              "WHERE userFlow < 2 * 1024 * 1024 * 1024 "
              "AND userFlow > 0 "
              "AND sysFlow < 2 * 1024 * 1024 * 1024 "
              "AND sysFlow > 0 "
-             "GROUP BY createtime, country, t_type) AS t1 "
+             "GROUP BY createtime, t_orgid, t_type) AS t1 "
              "LEFT JOIN `2017_datetime_timestamp` AS t2 ON t1.createtime = t2.timestamp").format(table_name)
 
     con = database('GSVC_SQL').get_db()
@@ -129,10 +128,10 @@ if __name__ == '__main__':
     month = [i + 1 for i in range(12)] 
     # 1 - by day, org, type
     for m in month:
-        qdata = flowlog_by_day_org_type('t_terminal_flow_count_day_2017{m:>02d}'.format(m=m))
-        generic_insert(qdata, 'terminal_flow_count_2017_by_org_type_day')
+        qdata = flowlog_by_day_org_type(table_name='t_terminal_flow_count_day_2017{m:>02d}'.format(m=m))
+        generic_insert(data=qdata, target_table='terminal_flow_count_2017_by_org_type_day')
     # 2 - by day, country, org, type
     # 处理完第一个表再处理第二个表，方便数据异常处理
     for m in month:
-        qdata = flowlog_by_day_country_org_type('t_terminal_flow_count_day_2017{m:>02d}'.format(m=m))
-        generic_insert(qdata, 'terminal_flow_count_2017_by_country_org_type_day')
+        qdata = flowlog_by_day_country_org_type(table_name='t_terminal_flow_count_day_2017{m:>02d}'.format(m=m))
+        generic_insert(data=qdata, target_table='terminal_flow_count_2017_by_country_org_type_day')
